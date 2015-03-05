@@ -1,0 +1,146 @@
+INSERT OVERWRITE TABLE pri_result.migo_kpi PARTITION (dt='${date_ymd}')
+
+SELECT a.seller_id, 
+    a.cate_id, i.cate_level1_name,
+    a.revenue,          -- 營業額
+    aa.first_total_amount,-- 加總第一次訂單的總金額
+    b.AM,               -- 有效客戶數
+    e.increasedN,       -- 新增首購客戶數
+    g.increasedS,       -- 新增沉睡客戶數
+    g.curr,             -- S3客戶數
+    e.increasedN_ratio, -- 客戶新增率
+    g.increasedS_ratio, -- 客戶流失率
+    c.active_radio,     -- 整體客戶活躍度
+    c.active_radio_E,   -- 老客活躍度
+    h.active_count_E,   -- 老客活躍數
+    c.stickiness_radio, -- 黏著度
+    c.stickiness_radio_N, -- 新客黏著度
+    c.stickiness_radio_E, -- 老客黏著度
+    d.arpu,             -- 有效客單價
+    d.arpu_first,       -- 新客客單價
+    d.arpu_repeated,    -- 老客客單價
+    j.login_mbr_pv + j.non_login_mbr_pv, j.login_mbr_pv, j.non_login_mbr_pv, 
+    k.pay_ord_cnt_new + k.pay_ord_cnt_old, k.pay_ord_cnt_new, k.pay_ord_cnt_old
+FROM (
+    SELECT seller_id, cate_id, SUM(sales) AS revenue
+    FROM pri_result.migo_item_revenue 
+    WHERE dt = '${date_ymd}'
+    GROUP BY seller_id, cate_id
+) a LEFT OUTER JOIN (
+    -- 加總第一次訂單的總金額(過去三十天)
+    SELECT d.seller_id, d.cate_id, SUM(d.alipay_trade_amt) as first_total_amount 
+    FROM (
+        SELECT a.seller_id, a.buyer_id, 
+            CASE WHEN b.cate_level1_id IS NULL THEN -999
+                ELSE b.cate_level1_id END AS cate_id
+            , a.alipay_trade_amt, alipay_time
+        FROM (
+            SELECT seller_id, buyer_id, auction_id, alipay_trade_amt, TO_CHAR(alipay_time,'yyyy-mm-dd') AS alipay_time
+            FROM sys_seller_dwb_shop_order_d
+            WHERE trade_status&2 = 2 AND dt >= TO_CHAR(DATEADD(TO_DATE('${date_ymd}', 'yyyymmdd'), -30 , 'dd'), 'yyyymmdd') AND dt <= '${date_ymd}'
+        ) a LEFT OUTER JOIN (
+            SELECT seller_id, auction_id, cate_level1_id
+            FROM sys_seller_dim_item_online_d
+            WHERE dt = '${date_ymd}'
+        ) b ON a.seller_id = b.seller_id AND a.auction_id = b.auction_id
+    ) d JOIN (
+        SELECT seller_id, buyer_id, cate_id, tagging 
+        FROM pri_result.migo_tagging_nes n
+        WHERE dt = '${date_ymd}' AND tagging IN ('N0', 'EB') -- The buyers is belonging to the "New Group" in the past 30 days
+            AND cate_id != -1
+    ) n ON d.seller_id = n.seller_id AND d.buyer_id = n.buyer_id AND d.cate_id = n.cate_id JOIN (
+        SELECT seller_id, buyer_id, cate_id, alipay_time
+        FROM pri_result.migo_kpi_1_individual_pi 
+        WHERE dt = '${date_ymd}' AND alipay_time_seq = 1 -- The first buying date for every buyer
+            AND cate_id != -1
+    ) p ON d.seller_id = p.seller_id AND d.buyer_id = p.buyer_id AND d.alipay_time = p.alipay_time AND d.cate_id = p.cate_id
+    GROUP BY d.seller_id, d.cate_id
+
+    UNION ALL
+
+    SELECT d.seller_id, -1 AS cate_id, SUM(d.alipay_trade_amt) as first_total_amount
+    FROM (
+        SELECT seller_id, buyer_id, alipay_trade_amt, TO_CHAR(alipay_time,'yyyy-mm-dd') AS alipay_time
+        FROM sys_seller_dwb_shop_order_d
+        WHERE trade_status&2 = 2 AND dt >= TO_CHAR(DATEADD(TO_DATE('${date_ymd}', 'yyyymmdd'), -30 , 'dd'), 'yyyymmdd') AND dt <= '${date_ymd}'
+    ) d JOIN (
+        SELECT seller_id, buyer_id, tagging
+        FROM pri_result.migo_tagging_nes n
+        WHERE dt = '${date_ymd}' AND cate_id = -1
+            AND tagging IN ('N0', 'EB') -- The buyers is belonging to the "New Group" in the past 30 days
+    ) n ON d.seller_id = n.seller_id AND d.buyer_id = n.buyer_id JOIN (
+        SELECT seller_id, buyer_id, alipay_time
+        FROM pri_result.migo_kpi_1_individual_pi
+        WHERE dt = '${date_ymd}' AND cate_id = -1
+            AND alipay_time_seq = 1 -- The first buying date for every buyer
+    ) p ON d.seller_id = p.seller_id AND d.buyer_id = p.buyer_id AND d.alipay_time = p.alipay_time
+    GROUP BY d.seller_id
+) aa ON a.seller_id = aa.seller_id AND a.cate_id = aa.cate_id LEFT OUTER JOIN (
+    SELECT seller_id, cate_id, SUM(count_total) AS AM
+    FROM pri_result.migo_active
+    WHERE dt = '${date_ymd}' AND tagging IN ("N0", "EB", "E0")
+    GROUP BY seller_id, cate_id
+) b ON a.seller_id = b.seller_id AND a.cate_id = b.cate_id LEFT OUTER JOIN (
+    SELECT seller_id, cate_id, active_radio, active_radio_E, stickiness_radio, stickiness_radio_N, stickiness_radio_E
+    FROM pri_result.migo_nes_active_results 
+    WHERE dt = '${date_ymd}'
+) c ON a.seller_id = c.seller_id AND a.cate_id = c.cate_id LEFT OUTER JOIN (
+    SELECT seller_id, cate_id, SUM(count_total) AS active_count_E
+    FROM pri_result.migo_active
+    WHERE dt = '${date_ymd}' AND tagging = 'E0'
+    GROUP BY seller_id, cate_id
+) h ON a.seller_id = h.seller_id AND a.cate_id = h.cate_id LEFT OUTER JOIN (
+    SELECT seller_id, cate_id, arpu, arpu_first, arpu_repeated
+    FROM pri_result.migo_kpi_4_arpu 
+    WHERE dt = '${date_ymd}'
+) d ON a.seller_id = d.seller_id AND a.cate_id = d.cate_id LEFT OUTER JOIN (
+    SELECT a.seller_id, a.cate_id,
+        CASE WHEN (pre IS NULL) THEN -1 ELSE (curr - pre)/pre END AS increasedN_ratio,
+        CASE WHEN (pre IS NULL) THEN -999 ELSE (curr - pre) END AS increasedN
+    FROM (
+        SELECT seller_id, cate_id, SUM(count_total) AS curr
+        FROM pri_result.migo_active 
+        WHERE dt = '${date_ymd}' AND tagging IN ("N0", "EB")
+        GROUP BY seller_id, cate_id
+    ) a LEFT OUTER JOIN (
+        SELECT seller_id, cate_id, SUM(count_total) AS pre
+        FROM pri_result.migo_active 
+        WHERE dt = to_char(dateadd(to_date('${date_ymd}','yyyymmdd'), -1, 'dd'), 'yyyymmdd') 
+            AND tagging IN ("N0", "EB")
+        GROUP BY seller_id, cate_id
+    ) b ON a.seller_id = b.seller_id AND a.cate_id = b.cate_id
+) e ON a.seller_id = e.seller_id AND a.cate_id = e.cate_id LEFT OUTER JOIN (
+    SELECT seller_id, cate_id, SUM(count_total) AS S3
+    FROM  pri_result.migo_active 
+    WHERE dt = '${date_ymd}' AND tagging IN ("S3")
+    GROUP BY seller_id, cate_id
+) f ON a.seller_id = f.seller_id AND a.cate_id = f.cate_id LEFT OUTER JOIN (
+    SELECT a.seller_id, a.cate_id, curr,
+        CASE WHEN (pre IS NULL) THEN -1 ELSE (curr - pre)/pre END AS increasedS_ratio,
+        CASE WHEN (pre IS NULL) THEN -999 ELSE (curr - pre) END AS increasedS
+    FROM (
+        SELECT seller_id, cate_id, SUM(count_total) AS curr
+        FROM pri_result.migo_active 
+        WHERE dt = '${date_ymd}' AND tagging IN ("S3")
+        GROUP BY seller_id, cate_id
+    ) a LEFT OUTER JOIN (
+        SELECT seller_id, cate_id, SUM(count_total) AS pre
+        FROM pri_result.migo_active 
+        WHERE dt = to_char(dateadd(to_date('${date_ymd}','yyyymmdd'), -1, 'dd'), 'yyyymmdd') 
+            AND tagging IN ("S3")
+        GROUP BY seller_id, cate_id
+    ) b ON a.seller_id = b.seller_id AND a.cate_id = b.cate_id
+) g ON a.seller_id = g.seller_id AND a.cate_id = g.cate_id LEFT OUTER JOIN (
+    SELECT DISTINCT cate_level1_id, cate_level1_name
+    FROM sys_seller_dim_cate
+    WHERE dt = '${date_ymd}'
+) i ON a.cate_id = i.cate_level1_id LEFT OUTER JOIN (
+    SELECT seller_id, cate_id, login_mbr_pv, non_login_mbr_pv
+    FROM pri_result.migo_traffic
+    WHERE dt = '${date_ymd}'
+) j ON a.seller_id = j.seller_id AND a.cate_id = j.cate_id LEFT OUTER JOIN (
+    SELECT seller_id, cate_id, pay_ord_cnt_new, pay_ord_cnt_old
+    FROM pri_result.migo_conversion
+    WHERE dt = '${date_ymd}'
+) k ON a.seller_id = k.seller_id AND a.cate_id = k.cate_id; 
+
