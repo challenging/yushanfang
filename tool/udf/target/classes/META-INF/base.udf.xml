@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<udf>
+    <!-- profile -->
+    <baseId>cee3d69cc90d708795fb44276d7d68f2</baseId>
+    <projectId>1273</projectId>
+    <resourceName>udf</resourceName>
+    <functionName>MIGO_UDF_CDF</functionName>
+    <idePath>工作流/UDF_DISTRIBUTION</idePath>
+
+    <!-- classes -->
+    <className>migo.udf.MyUDF</className>
+</udf>

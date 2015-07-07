@@ -1,0 +1,20 @@
+app_key: '21805329'
+udf_name: MIGO_UDF_CDF
+udf_type: UDF
+udf_category: 字符串处理函数
+description: 'MIGO_UDF_CDF
+
+
+  函数声明：
+
+
+  Double MIGO_UDF_CDF(Double x)
+
+  用途：計算 CDF 值
+
+
+  参数说明：
+
+  x: 為預計購買日減去此客戶最後一次購買日的時間間隔（正值）'
+udf_class: udf.MyUDF
+udf_id: '3186'

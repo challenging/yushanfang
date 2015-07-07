@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapred>
+    <!-- profile -->
+    <baseId>1</baseId>
+    <projectId>1</projectId>
+    <resourceName>mr</resourceName>
+    <idePath>workflow/myfolder</idePath>
+
+    <!-- classes -->
+    <jobLauncher>migo.mr.JobLauncher</jobLauncher>
+    <mapper>migo.mr.MyMapper</mapper>
+    <reducer>migo.mr.MyReducer</reducer>
+    <combiner>migo.mr.MyCombiner</combiner>
+
+    <!--task-->
+    <mapOutputKey>word:string</mapOutputKey>
+    <mapOutputValue>cnt:bigint</mapOutputValue>
+    <!--
+    <numReduceTask></numReduceTask>
+    <memoryForMapTask></memoryForMapTask>
+    <memoryForReduceTask></memoryForReduceTask>
+    -->
+
+    <!-- tables -->
+    <inputTables>
+        <table>
+            <name>wordcount_in</name>
+            <partitions>
+                <partition>dt={yyyymmdd}</partition>
+                <partition>dt={yyyymmdd-1}</partition>
+            </partitions>
+        </table>
+    </inputTables>
+    <outputTable>
+        <name>wordcount_out</name>
+        <partition>dt={yyyymmdd}</partition>
+    </outputTable>
+</mapred>
