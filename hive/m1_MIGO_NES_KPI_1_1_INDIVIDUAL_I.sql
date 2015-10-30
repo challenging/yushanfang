@@ -16,13 +16,13 @@ FROM (
                 to_char(a.alipay_time,'yyyy-mm-dd') AS alipay_time
             FROM (
                 SELECT seller_id, platform_buyer_id AS buyer_id, auction_id, alipay_time
-                FROM sys_seller_dwb_shop_order_d
+                FROM ali_seller_dwb_shop_order_d_new
                 WHERE trade_status &2 = 2
                     AND dt >=  to_char(dateadd(to_date('${date_ymd}','yyyymmdd'), -365, 'dd'), 'yyyymmdd')
                     AND dt <= '${date_ymd}'
             ) a LEFT OUTER JOIN (
                 SELECT seller_id, auction_id, cate_level1_id
-                FROM sys_seller_dim_item_online_d
+                FROM ali_seller_dim_item_online_d
                 WHERE dt = '${date_ymd}'
             ) b ON a.seller_id = b.seller_id AND a.auction_id = b.auction_id
         ) a
@@ -40,7 +40,7 @@ FROM (
         ,lead(alipay_time, 1, "0") over(PARTITION BY seller_id, buyer_id ORDER BY alipay_time DESC) as pre_alipay_time
         FROM (
             SELECT seller_id, platform_buyer_id AS buyer_id, to_char(alipay_time,'yyyy-mm-dd') as alipay_time
-            FROM sys_seller_dwb_shop_order_d
+            FROM ali_seller_dwb_shop_order_d_new
             WHERE trade_status &2 = 2
                 AND dt >=  to_char(dateadd(to_date('${date_ymd}','yyyymmdd'), -365, 'dd'), 'yyyymmdd')
                 AND dt <= '${date_ymd}'
